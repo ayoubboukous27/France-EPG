@@ -25,7 +25,7 @@ jobs:
       - name: Extract WebGrab+Plus
         run: |
           tar -xzf WebGrabPlus_5.5_install.tar.gz
-          chmod +x run.net.sh
+          chmod +x .wg++/run.net.sh
 
       - name: Copy WebGrab configuration
         run: |
@@ -35,7 +35,7 @@ jobs:
 
       - name: Run WebGrab+Plus
         run: |
-          bash run.net.sh
+          ./.wg++/run.net.sh
 
       - name: Commit EPG output
         run: |
