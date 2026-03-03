@@ -1,36 +1,52 @@
-name: Canal+ EPG
+name: Grab Canal+ France EPG
 
 on:
   workflow_dispatch:
+  schedule:
+    - cron: "0 3 * * *" # كل يوم 03:00 UTC
 
 jobs:
   grab:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout
+      - name: Checkout repo
         uses: actions/checkout@v4
 
-      - name: Setup Node
+      - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 20
 
-      - name: Install dependencies
-        run: npm install
+      - name: Clone iptv-org/epg
+        run: |
+          git clone --depth 1 https://github.com/iptv-org/epg.git epg
 
-      - name: Grab Canal+ EPG
+      - name: Install dependencies
+        run: |
+          cd epg
+          npm install
+
+      - name: Copy Canal+ site files
+        run: |
+          mkdir -p epg/sites/canalplus.com
+          cp -r sites/canalplus.com/* epg/sites/canalplus.com/
+
+      - name: Grab Canal+ France EPG
         run: |
           mkdir -p Data
-          npx tsx scripts/commands/epg/grab.ts \
+          cd epg
+          npm run grab --- \
             --site=canalplus.com \
+            --channels=sites/canalplus.com/canalplus.com_fr.channels.xml \
             --days=2 \
-            --output=Data/guide_canalplus.xml
+            --output=../Data/guide_canalplus_fr.xml
 
-      - name: Commit XML
+      - name: Commit & Push
         run: |
           git config user.name "github-actions"
-          git config user.email "actions@github.com"
-          git add Data/guide_canalplus.xml
-          git commit -m "Update Canal+ EPG" || echo "No changes"
+          git config user.email "github-actions@github.com"
+          git pull --rebase origin main
+          git add Data/guide_canalplus_fr.xml
+          git commit -m "Update Canal+ France EPG" || echo "No changes"
           git push
