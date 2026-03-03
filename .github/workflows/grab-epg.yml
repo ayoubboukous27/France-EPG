@@ -1,48 +1,42 @@
-name: Grab EPG
+name: Generate France EPG
 
 on:
   workflow_dispatch:
   schedule:
-    - cron: "0 3 * * *"
+    - cron: "0 3 * * *"   # يوميًا 03:00 UTC
 
 jobs:
-  grab:
+  webgrab:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repository
+      - name: Checkout repo
         uses: actions/checkout@v4
 
-      - name: Install dependencies
+      - name: Install .NET Runtime
         run: |
           sudo apt update
-          sudo apt install -y mono-complete tar
+          sudo apt install -y dotnet-runtime-9.0
 
-      - name: Extract WebGrab+Plus (local archive)
+      - name: Extract WebGrab+Plus
         run: |
           tar -xzf WebGrabPlus_5.5_install.tar.gz
+          chmod +x run.net.sh
 
-      - name: Prepare WebGrab files
+      - name: Copy WebGrab config & files
         run: |
-          mkdir -p WebGrab+Plus/bin/output
-          cp webgrab/WebGrab++.config.xml WebGrab+Plus/bin/
-          cp webgrab/channels/*.xml WebGrab+Plus/bin/
-          cp -r webgrab/siteini.pack WebGrab+Plus/bin/
+          cp webgrab/WebGrab++.config.xml .
+          cp -r webgrab/siteini.pack .
+          cp webgrab/channels/*.xml .
 
       - name: Run WebGrab+Plus
         run: |
-          cd WebGrab+Plus/bin
-          mono WebGrab+Plus.exe
+          bash run.net.sh
 
-      - name: Commit EPG
+      - name: Commit EPG result
         run: |
-          if [ -f WebGrab+Plus/bin/output/guide.xml ]; then
-            git config --global user.name "github-actions"
-            git config --global user.email "actions@github.com"
-            git add WebGrab+Plus/bin/output/guide.xml
-            git commit -m "Auto update EPG" || echo "No changes"
-            git push
-          else
-            echo "EPG not generated"
-            exit 1
-          fi
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+          git add epg.xml
+          git commit -m "Update EPG" || echo "No changes"
+          git push
