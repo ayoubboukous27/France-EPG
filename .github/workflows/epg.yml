@@ -1,9 +1,10 @@
-name: Generate France EPG
+name: Generate EPG (WebGrab++)
 
 on:
   workflow_dispatch:
-  schedule:
-    - cron: "0 3 * * *"
+
+permissions:
+  contents: write
 
 jobs:
   epg:
@@ -13,30 +14,27 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v4
 
-      - name: Install dependencies
+      - name: Prepare WebGrab home
         run: |
-          sudo apt update
-          sudo apt install -y wget unzip ca-certificates
+          mkdir -p ~/.wg++
+          cp -r WebGrabPlus_5.5/.wg++/* ~/.wg++
 
-      - name: Extract WebGrab++
+      - name: Copy siteini & channels
         run: |
-          mkdir -p .wg++
-          tar -xzf WebGrabPlus_5.5_install.tar.gz -C .wg++
-
-      - name: Disable internet check
-        run: |
-          sed -i 's/<checkinternet>yes/<checkinternet>no/g' webgrab/WebGrab++.config.xml
+          mkdir -p ~/.wg++/siteini.pack
+          cp webgrab/siteini.pack/*.ini ~/.wg++/siteini.pack/
+          cp webgrab/channels/*.xml ~/.wg++/
 
       - name: Run WebGrab++
         run: |
-          chmod +x .wg++/run.net.sh
-          cd webgrab
-          ../.wg++/run.net.sh
+          chmod +x ~/.wg++/run.net.sh
+          cd ~/.wg++
+          ./run.net.sh
 
       - name: Commit EPG
         run: |
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
-          git add epg.xml
-          git commit -m "Update EPG" || echo "No changes"
-          git push
+          git add *.xml || true
+          git commit -m "Update EPG" || true
+          git push || true
