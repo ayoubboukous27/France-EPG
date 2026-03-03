@@ -196,3 +196,4 @@ With these one can combine parts several channels in combi-channel. These parts 
 <channel update="i" site="tvgids.upc.nl" site_id="Ered.+live+2" site_channel="EredivisieLive2" xmltv_id="CombiChannel_Id" exclude="Eredivisie Live Tekst TV">CombiChannel_Name</channel>
 -->
 </settings>
+
