@@ -10,11 +10,15 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repo
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Install .NET Runtime
+      - name: Install .NET Runtime 9.0
         run: |
+          sudo apt update
+          sudo apt install -y wget apt-transport-https
+          wget https://packages.microsoft.com/config/ubuntu/22.04/packages-microsoft-prod.deb
+          sudo dpkg -i packages-microsoft-prod.deb
           sudo apt update
           sudo apt install -y dotnet-runtime-9.0
 
@@ -23,7 +27,7 @@ jobs:
           tar -xzf WebGrabPlus_5.5_install.tar.gz
           chmod +x run.net.sh
 
-      - name: Copy WebGrab config & files
+      - name: Copy WebGrab configuration
         run: |
           cp webgrab/WebGrab++.config.xml .
           cp -r webgrab/siteini.pack .
@@ -33,10 +37,10 @@ jobs:
         run: |
           bash run.net.sh
 
-      - name: Commit EPG result
+      - name: Commit EPG output
         run: |
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
           git add epg.xml
-          git commit -m "Update EPG" || echo "No changes"
+          git commit -m "Update EPG" || echo "No changes to commit"
           git push
