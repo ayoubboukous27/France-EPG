@@ -1,46 +1,45 @@
-name: Generate France EPG
+name: WebGrab EPG
 
 on:
   workflow_dispatch:
-  schedule:
-    - cron: "0 3 * * *"   # يوميًا 03:00 UTC
 
 jobs:
-  webgrab:
+  grab:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repository
+      - name: Checkout repo
         uses: actions/checkout@v4
 
-      - name: Install .NET Runtime 9.0
+      - name: Install dependencies
         run: |
           sudo apt update
-          sudo apt install -y wget apt-transport-https
-          wget https://packages.microsoft.com/config/ubuntu/22.04/packages-microsoft-prod.deb
-          sudo dpkg -i packages-microsoft-prod.deb
-          sudo apt update
-          sudo apt install -y dotnet-runtime-9.0
+          sudo apt install -y libcurl4 libicu-dev
 
-      - name: Extract WebGrab+Plus
+      - name: Extract WebGrab++
         run: |
-          tar -xzf WebGrabPlus_5.5_install.tar.gz
+          mkdir -p .wg++
+          tar -xzf WebGrabPlus_5.5_install.tar.gz -C .wg++
+
+      - name: Prepare WebGrab files
+        run: |
+          cp webgrab/WebGrab++.config.xml .wg++
+          cp webgrab/channels/*.xml .wg++
+          cp webgrab/siteini.pack/*.ini .wg++
+
+      - name: Fix permissions
+        run: |
           chmod +x .wg++/run.net.sh
 
-      - name: Copy WebGrab configuration
+      - name: Run WebGrab++
         run: |
-          cp webgrab/WebGrab++.config.xml .
-          cp -r webgrab/siteini.pack .
-          cp webgrab/channels/*.xml .
+          cd .wg++
+          ./run.net.sh
 
-      - name: Run WebGrab+Plus
-        run: |
-          ./.wg++/run.net.sh
-
-      - name: Commit EPG output
+      - name: Commit EPG
         run: |
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
           git add epg.xml
-          git commit -m "Update EPG" || echo "No changes to commit"
+          git commit -m "Update EPG" || echo "No changes"
           git push
