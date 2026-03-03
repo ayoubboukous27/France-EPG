@@ -1,9 +1,9 @@
 name: Grab EPG
 
 on:
-  schedule:
-    - cron: "0 3 * * *"   # كل يوم الساعة 03:00 UTC
   workflow_dispatch:
+  schedule:
+    - cron: "0 3 * * *"   # مرة يوميًا
 
 jobs:
   grab:
@@ -16,24 +16,34 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt update
-          sudo apt install -y mono-complete wget unzip
+          sudo apt install -y mono-complete wget tar
 
-      - name: Download WebGrab+Plus
+      - name: Download WebGrab+Plus (latest)
         run: |
-          wget https://webgrabplus.com/sites/default/files/download/SW/V3.3/WebGrabPlus_V3.3_install.tar.gz
-          tar -xzf WebGrabPlus_V3.3_install.tar.gz
-          chmod +x WebGrab+Plus/bin/WebGrab+Plus
+          wget https://github.com/SilentButeo2/webgrabplus/raw/master/WebGrabPlus_latest_install.tar.gz
+          tar -xzf WebGrabPlus_latest_install.tar.gz
 
-      - name: Run WebGrab
+      - name: Prepare WebGrab files
         run: |
-          cp -r webgrab/* WebGrab+Plus/bin/
+          mkdir -p WebGrab+Plus/bin/output
+          cp webgrab/WebGrab++.config.xml WebGrab+Plus/bin/
+          cp webgrab/channels/*.xml WebGrab+Plus/bin/
+          cp -r webgrab/siteini.pack WebGrab+Plus/bin/
+
+      - name: Run WebGrab+Plus
+        run: |
           cd WebGrab+Plus/bin
           mono WebGrab+Plus.exe
 
       - name: Commit EPG
         run: |
-          git config --global user.name "github-actions"
-          git config --global user.email "actions@github.com"
-          git add WebGrab+Plus/bin/guide.xml
-          git commit -m "Auto update EPG" || echo "No changes"
-          git push
+          if [ -f WebGrab+Plus/bin/output/guide.xml ]; then
+            git config --global user.name "github-actions"
+            git config --global user.email "actions@github.com"
+            git add WebGrab+Plus/bin/output/guide.xml
+            git commit -m "Auto update EPG" || echo "No changes"
+            git push
+          else
+            echo "EPG not generated"
+            exit 1
+          fi
