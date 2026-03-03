@@ -235,3 +235,4 @@ function parseRating(info) {
     value: map[rating.value] || rating.value
   }
 }
+
