@@ -1,0 +1,29 @@
+name: Extract WebGrabPlus 5.5
+
+on:
+  workflow_dispatch:
+
+jobs:
+  extract:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Show files before extract
+        run: |
+          ls -la
+
+      - name: Create destination directory
+        run: |
+          mkdir -p WebGrabPlus_5.5
+
+      - name: Extract WebGrabPlus archive
+        run: |
+          tar -xzf WebGrabPlus_5.5_install.tar.gz -C WebGrabPlus_5.5
+
+      - name: Show files after extract
+        run: |
+          ls -la WebGrabPlus_5.5
+          ls -la WebGrabPlus_5.5/.wg++
