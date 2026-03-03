@@ -19,9 +19,9 @@ jobs:
       - name: Extract WebGrab++
         run: |
           mkdir -p .wg++
-          tar -xzf WebGrabPlus_5.5_install.tar.gz -C .wg++
+          tar -xzf WebGrabPlus_5.5_install.tar.gz --strip-components=1 -C .wg++
 
-      - name: Prepare WebGrab files
+      - name: Copy config and site files
         run: |
           cp webgrab/WebGrab++.config.xml .wg++
           cp webgrab/channels/*.xml .wg++
