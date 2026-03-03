@@ -1,0 +1,36 @@
+name: Canal+ EPG
+
+on:
+  workflow_dispatch:
+
+jobs:
+  grab:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Grab Canal+ EPG
+        run: |
+          mkdir -p Data
+          npx tsx scripts/commands/epg/grab.ts \
+            --site=canalplus.com \
+            --days=2 \
+            --output=Data/guide_canalplus.xml
+
+      - name: Commit XML
+        run: |
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+          git add Data/guide_canalplus.xml
+          git commit -m "Update Canal+ EPG" || echo "No changes"
+          git push
