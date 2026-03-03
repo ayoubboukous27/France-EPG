@@ -5,6 +5,8 @@
   <timezone>Europe/Paris</timezone>
   <cultureinfo>fr-FR</cultureinfo>
 
+  <checkinternet>no</checkinternet>
+
   <channels>
     programme-tv.net.channels.xml
   </channels>
