@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<settings>
+
+  <!-- ملف الإخراج -->
+  <filename>output/guide.xml</filename>
+
+  <!-- الوضع العادي -->
+  <mode>n</mode>
+
+  <!-- مدة السحب (أيام) -->
+  <timespan>7</timespan>
+
+  <!-- لا تحديث جزئي -->
+  <update>f</update>
+
+  <!-- تقليل الحظر -->
+  <user-agent>
+    Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+    (KHTML, like Gecko) Chrome/122.0 Safari/537.36
+  </user-agent>
+
+  <!-- تأخير بين الطلبات -->
+  <retry time-out="5" attempts="2" />
+
+  <!-- ملف القنوات -->
+  <channels>channels/programme-tv.channels.xml</channels>
+
+  <!-- ترميز -->
+  <charset>UTF-8</charset>
+
+  <!-- منع التحميل المتوازي -->
+  <parallelism>1</parallelism>
+
+  <!-- تصحيح الأخطاء -->
+  <logging>
+    <log-file>webgrab.log</log-file>
+    <log-level>info</log-level>
+  </logging>
+
+</settings>
