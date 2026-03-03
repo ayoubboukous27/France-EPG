@@ -3,7 +3,7 @@ name: Grab EPG
 on:
   workflow_dispatch:
   schedule:
-    - cron: "0 3 * * *"   # مرة يوميًا
+    - cron: "0 3 * * *"
 
 jobs:
   grab:
@@ -16,12 +16,11 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt update
-          sudo apt install -y mono-complete wget tar
+          sudo apt install -y mono-complete tar
 
-      - name: Download WebGrab+Plus (latest)
+      - name: Extract WebGrab+Plus (local archive)
         run: |
-          wget https://github.com/SilentButeo2/webgrabplus/raw/master/WebGrabPlus_latest_install.tar.gz
-          tar -xzf WebGrabPlus_latest_install.tar.gz
+          tar -xzf WebGrabPlus_5.5_install.tar.gz
 
       - name: Prepare WebGrab files
         run: |
