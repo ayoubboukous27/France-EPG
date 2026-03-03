@@ -1,10 +1,12 @@
-name: WebGrab EPG
+name: Generate France EPG
 
 on:
   workflow_dispatch:
+  schedule:
+    - cron: "0 3 * * *"
 
 jobs:
-  grab:
+  epg:
     runs-on: ubuntu-latest
 
     steps:
@@ -14,27 +16,22 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt update
-          sudo apt install -y libcurl4 libicu-dev
+          sudo apt install -y wget unzip ca-certificates
 
       - name: Extract WebGrab++
         run: |
           mkdir -p .wg++
-          tar -xzf WebGrabPlus_5.5_install.tar.gz --strip-components=1 -C .wg++
+          tar -xzf WebGrabPlus_5.5_install.tar.gz -C .wg++
 
-      - name: Copy config and site files
+      - name: Disable internet check
         run: |
-          cp webgrab/WebGrab++.config.xml .wg++
-          cp webgrab/channels/*.xml .wg++
-          cp webgrab/siteini.pack/*.ini .wg++
-
-      - name: Fix permissions
-        run: |
-          chmod +x .wg++/run.net.sh
+          sed -i 's/<checkinternet>yes/<checkinternet>no/g' webgrab/WebGrab++.config.xml
 
       - name: Run WebGrab++
         run: |
-          cd .wg++
-          ./run.net.sh
+          chmod +x .wg++/run.net.sh
+          cd webgrab
+          ../.wg++/run.net.sh
 
       - name: Commit EPG
         run: |
