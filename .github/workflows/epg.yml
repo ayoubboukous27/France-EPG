@@ -3,10 +3,7 @@ name: France EPG
 on:
   workflow_dispatch:
   schedule:
-    - cron: "0 3 * * *" # يوميًا 03:00 UTC (04:00 فرنسا)
-
-permissions:
-  contents: write
+    - cron: "0 3 * * *"   # كل يوم 03:00 UTC
 
 jobs:
   grab-epg:
@@ -23,9 +20,7 @@ jobs:
 
       - name: Clone iptv-org/epg
         run: |
-          if [ ! -d "epg" ]; then
-            git clone --depth 1 https://github.com/iptv-org/epg.git
-          fi
+          git clone --depth 1 https://github.com/iptv-org/epg.git
 
       - name: Install dependencies
         run: |
@@ -38,16 +33,13 @@ jobs:
       - name: Grab France EPG (programme-tv.net)
         run: |
           cd epg
-          npm run grab --- \
+          TZ=Europe/Paris npm run grab --- \
             --site=programme-tv.net \
             --days=7 \
-            --timezone=Europe/Paris \
             --output=../Data/guide_france.xml
 
-      - name: Commit & Push EPG
-        run: |
-          git config --global user.name "github-actions"
-          git config --global user.email "github-actions@github.com"
-          git add Data/guide_france.xml
-          git commit -m "Update France EPG" || echo "No changes to commit"
-          git push
+      - name: Upload EPG artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: guide_france
+          path: Data/guide_france.xml
