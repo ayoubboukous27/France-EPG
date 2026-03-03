@@ -1,40 +1,37 @@
-name: Generate EPG (WebGrab++)
+name: France EPG
 
 on:
   workflow_dispatch:
-
-permissions:
-  contents: write
+  schedule:
+    - cron: "0 3 * * *" # كل يوم 03:00 UTC
 
 jobs:
-  epg:
+  grab-epg:
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-      - name: Prepare WebGrab home
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+
+      - name: Install system deps
+        run: sudo apt-get update
+
+      - name: Run grab script
         run: |
-          mkdir -p ~/.wg++
-          cp -r WebGrabPlus_5.5/.wg++/* ~/.wg++
+          chmod +x scripts/grab_france_epg.sh
+          ./scripts/grab_france_epg.sh
 
-      - name: Copy siteini & channels
-        run: |
-          mkdir -p ~/.wg++/siteini.pack
-          cp webgrab/siteini.pack/*.ini ~/.wg++/siteini.pack/
-          cp webgrab/channels/*.xml ~/.wg++/
-
-      - name: Run WebGrab++
-        run: |
-          chmod +x ~/.wg++/run.net.sh
-          cd ~/.wg++
-          ./run.net.sh
-
-      - name: Commit EPG
+      - name: Commit & Push EPG
         run: |
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
-          git add *.xml || true
-          git commit -m "Update EPG" || true
-          git push || true
+          git add epg_france.xml
+          git commit -m "update france epg" || echo "No changes"
+          git push
