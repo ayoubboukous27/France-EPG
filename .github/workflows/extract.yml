@@ -1,4 +1,4 @@
-name: Extract WebGrabPlus 5.5
+name: Extract and Save WebGrabPlus 5.5
 
 on:
   workflow_dispatch:
@@ -8,22 +8,50 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      # 1️⃣ جلب الريبو
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Show files before extract
+      # 2️⃣ عرض الملفات قبل الفك
+      - name: List files before extract
         run: |
           ls -la
 
+      # 3️⃣ إنشاء مجلد الهدف
       - name: Create destination directory
         run: |
           mkdir -p WebGrabPlus_5.5
 
-      - name: Extract WebGrabPlus archive
+      # 4️⃣ فك الضغط
+      - name: Extract WebGrabPlus 5.5
         run: |
           tar -xzf WebGrabPlus_5.5_install.tar.gz -C WebGrabPlus_5.5
 
-      - name: Show files after extract
+      # 5️⃣ التحقق من الملفات
+      - name: Verify extracted files
         run: |
+          echo "Listing WebGrabPlus_5.5:"
           ls -la WebGrabPlus_5.5
+          echo "Listing .wg++:"
           ls -la WebGrabPlus_5.5/.wg++
+
+      # 6️⃣ إعداد git
+      - name: Configure git
+        run: |
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+
+      # 7️⃣ إضافة الملفات الجديدة
+      - name: Add extracted files
+        run: |
+          git add WebGrabPlus_5.5
+
+      # 8️⃣ عمل commit (بدون فشل إذا لا يوجد تغيير)
+      - name: Commit files
+        run: |
+          git commit -m "Extract WebGrabPlus 5.5" || echo "Nothing to commit"
+
+      # 9️⃣ رفع الملفات إلى الريبو
+      - name: Push changes
+        run: |
+          git push
