@@ -1,0 +1,39 @@
+name: Grab EPG
+
+on:
+  schedule:
+    - cron: "0 3 * * *"   # كل يوم الساعة 03:00 UTC
+  workflow_dispatch:
+
+jobs:
+  grab:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt update
+          sudo apt install -y mono-complete wget unzip
+
+      - name: Download WebGrab+Plus
+        run: |
+          wget https://webgrabplus.com/sites/default/files/download/SW/V3.3/WebGrabPlus_V3.3_install.tar.gz
+          tar -xzf WebGrabPlus_V3.3_install.tar.gz
+          chmod +x WebGrab+Plus/bin/WebGrab+Plus
+
+      - name: Run WebGrab
+        run: |
+          cp -r webgrab/* WebGrab+Plus/bin/
+          cd WebGrab+Plus/bin
+          mono WebGrab+Plus.exe
+
+      - name: Commit EPG
+        run: |
+          git config --global user.name "github-actions"
+          git config --global user.email "actions@github.com"
+          git add WebGrab+Plus/bin/guide.xml
+          git commit -m "Auto update EPG" || echo "No changes"
+          git push
