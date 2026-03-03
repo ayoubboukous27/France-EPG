@@ -5,6 +5,7 @@
   <timezone>Europe/Paris</timezone>
   <cultureinfo>fr-FR</cultureinfo>
 
+  <!-- هذا السطر هو المهم -->
   <checkinternet>no</checkinternet>
 
   <channels>
