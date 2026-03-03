@@ -3,35 +3,43 @@ name: France EPG
 on:
   workflow_dispatch:
   schedule:
-    - cron: "0 3 * * *" # كل يوم 03:00 UTC
+    - cron: "0 3 * * *"
 
 jobs:
-  grab-epg:
+  grab:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repo
+      - name: Checkout
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
-      - name: Setup Node.js
+      - name: Setup Node.js 20
         uses: actions/setup-node@v4
         with:
-          node-version: 18
+          node-version: 20
+          cache: npm
 
-      - name: Install system deps
-        run: sudo apt-get update
-
-      - name: Run grab script
+      - name: Clone iptv-org/epg
         run: |
-          chmod +x scripts/grab_france_epg.sh
-          ./scripts/grab_france_epg.sh
+          if [ ! -d epg ]; then
+            git clone --depth 1 https://github.com/iptv-org/epg.git
+          fi
 
-      - name: Commit & Push EPG
+      - name: Install dependencies
         run: |
-          git config user.name "github-actions"
-          git config user.email "github-actions@github.com"
-          git add epg_france.xml
-          git commit -m "update france epg" || echo "No changes"
-          git push
+          cd epg
+          npm install
+
+      - name: Grab France EPG
+        run: |
+          cd epg
+          npx tsx scripts/commands/epg/grab.ts \
+            --site=programme-tv.net \
+            --days=7 \
+            --output=guide_france.xml
+
+      - name: Upload EPG
+        uses: actions/upload-artifact@v4
+        with:
+          name: guide_france
+          path: epg/guide_france.xml
