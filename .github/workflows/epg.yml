@@ -3,41 +3,51 @@ name: France EPG
 on:
   workflow_dispatch:
   schedule:
-    - cron: "0 3 * * *"
+    - cron: "0 3 * * *" # يوميًا 03:00 UTC (04:00 فرنسا)
+
+permissions:
+  contents: write
 
 jobs:
-  grab:
+  grab-epg:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout
+      - name: Checkout repo
         uses: actions/checkout@v4
 
-      - name: Setup Node.js 20
+      - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 20
 
       - name: Clone iptv-org/epg
         run: |
-          if [ ! -d epg ]; then
+          if [ ! -d "epg" ]; then
             git clone --depth 1 https://github.com/iptv-org/epg.git
           fi
 
       - name: Install dependencies
-        working-directory: epg
-        run: npm install
-
-      - name: Grab France EPG
-        working-directory: epg
         run: |
-          npx tsx scripts/commands/epg/grab.ts \
+          cd epg
+          npm install
+
+      - name: Create Data folder
+        run: mkdir -p Data
+
+      - name: Grab France EPG (programme-tv.net)
+        run: |
+          cd epg
+          npm run grab --- \
             --site=programme-tv.net \
             --days=7 \
-            --output=guide_france.xml
+            --timezone=Europe/Paris \
+            --output=../Data/guide_france.xml
 
-      - name: Upload EPG
-        uses: actions/upload-artifact@v4
-        with:
-          name: guide_france
-          path: epg/guide_france.xml
+      - name: Commit & Push EPG
+        run: |
+          git config --global user.name "github-actions"
+          git config --global user.email "github-actions@github.com"
+          git add Data/guide_france.xml
+          git commit -m "Update France EPG" || echo "No changes to commit"
+          git push
