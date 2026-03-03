@@ -17,7 +17,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: npm
 
       - name: Clone iptv-org/epg
         run: |
@@ -26,13 +25,12 @@ jobs:
           fi
 
       - name: Install dependencies
-        run: |
-          cd epg
-          npm install
+        working-directory: epg
+        run: npm install
 
       - name: Grab France EPG
+        working-directory: epg
         run: |
-          cd epg
           npx tsx scripts/commands/epg/grab.ts \
             --site=programme-tv.net \
             --days=7 \
