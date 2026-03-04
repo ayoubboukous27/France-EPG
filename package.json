@@ -9,9 +9,13 @@
   "dependencies": {
     "dayjs": "^1.11.10",
     "axios": "^1.6.0",
-    "puppeteer": "^21.0.0"
+    "puppeteer": "latest"
   },
-  "keywords": ["epg", "canalplus", "france"],
+  "keywords": [
+    "epg",
+    "canalplus",
+    "france"
+  ],
   "author": "",
   "license": "MIT"
 }
