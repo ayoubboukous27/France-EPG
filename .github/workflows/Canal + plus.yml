@@ -21,7 +21,8 @@ jobs:
       - name: تثبيت الاعتماديات
         run: |
           npm init -y
-          npm install dayjs axios puppeteer
+          # تحديث إصدار puppeteer إلى الأحدث
+          npm install dayjs axios puppeteer@latest
 
       - name: تثبيت Chromium
         run: |
