@@ -1,52 +1,60 @@
-name: Grab Canal+ France EPG
+# .github/workflows/update-epg.yml
+name: تحديث EPG Canal+ تلقائياً
 
 on:
-  workflow_dispatch:
   schedule:
-    - cron: "0 3 * * *" # كل يوم 03:00 UTC
+    - cron: '0 3 * * *'  # يعمل يومياً في 03:00 UTC
+  workflow_dispatch:      # للتشغيل اليدوي
 
 jobs:
-  grab:
+  generate-epg:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repo
+      - name: استنساخ المستودع
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
+      - name: إعداد Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: '20'
 
-      - name: Clone iptv-org/epg
-        run: |
-          git clone --depth 1 https://github.com/iptv-org/epg.git epg
+      - name: تثبيت الاعتماديات
+        run: npm install epg-grabber dayjs axios
 
-      - name: Install dependencies
-        run: |
-          cd epg
-          npm install
+      # ✨ خطوة جديدة: التأكد من وجود مجلد data
+      - name: إنشاء مجلد data إذا لم يكن موجوداً
+        run: mkdir -p ./data
 
-      - name: Copy Canal+ site files
+      # ✨ تم تغيير مسار الإخراج إلى data/
+      - name: استخراج EPG من Canal+
         run: |
-          mkdir -p epg/sites/canalplus.com
-          cp -r sites/canalplus.com/* epg/sites/canalplus.com/
+          npx epg-grabber \
+            --config ./canalplus.com.config.js \
+            --channels ./canalplus.com_fr.channels.xml \
+            --output ./data/epg-canalplus.xml \
+            --days 2
 
-      - name: Grab Canal+ France EPG
-        run: |
-          mkdir -p Data
-          cd epg
-          npm run grab --- \
-            --site=canalplus.com \
-            --channels=sites/canalplus.com/canalplus.com_fr.channels.xml \
-            --days=2 \
-            --output=../Data/guide_canalplus_fr.xml
+      # ✨ تم تغيير مسار الضغط أيضاً
+      - name: ضغط ملف EPG
+        run: gzip -c ./data/epg-canalplus.xml > ./data/epg-canalplus.xml.gz
 
-      - name: Commit & Push
+      # ✨ رفع المخرجات من مجلد data
+      - name: رفع المخرجات (EPG)
+        uses: actions/upload-artifact@v4
+        with:
+          name: EPG-CanalPlus
+          path: |
+            ./data/epg-canalplus.xml
+            ./data/epg-canalplus.xml.gz
+
+      # (اختياري) دفع التغييرات إلى المستودع
+      # ملاحظة: هذا الخيار سيضيف مجلد data إلى الريبو
+      - name: دفع EPG الجديد إلى المستودع
         run: |
-          git config user.name "github-actions"
-          git config user.email "github-actions@github.com"
-          git pull --rebase origin main
-          git add Data/guide_canalplus_fr.xml
-          git commit -m "Update Canal+ France EPG" || echo "No changes"
+          git config --global user.name "GitHub Actions Bot"
+          git config --global user.email "actions@github.com"
+          git add ./data/
+          git diff --quiet && git diff --staged --quiet || git commit -m "تحديث تلقائي لملف EPG في مجلد data"
           git push
+        # إذا كنت لا تريد الدفع التلقائي، علّق على الأسطر أعلاه بإضافة # في بدايتها
