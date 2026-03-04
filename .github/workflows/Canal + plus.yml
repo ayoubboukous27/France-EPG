@@ -9,10 +9,22 @@ on:
 jobs:
   generate-epg:
     runs-on: ubuntu-latest
+    
+    # 📌 خطوة مهمة: التأكد من وجود الملفات قبل البدء
+    defaults:
+      run:
+        working-directory: ./
 
     steps:
       - name: استنساخ المستودع
         uses: actions/checkout@v4
+
+      - name: عرض محتويات المجلد (للتأكد من وجود الملفات)
+        run: |
+          echo "📂 محتويات المجلد الحالي:"
+          ls -la
+          echo "📄 هل ملف الكونفيغ موجود؟"
+          test -f canalplus.com.config.js && echo "✅ نعم" || echo "❌ لا"
 
       - name: إعداد Node.js
         uses: actions/setup-node@v4
@@ -22,39 +34,46 @@ jobs:
       - name: تثبيت الاعتماديات
         run: npm install epg-grabber dayjs axios
 
-      # ✨ خطوة جديدة: التأكد من وجود مجلد data
-      - name: إنشاء مجلد data إذا لم يكن موجوداً
+      - name: إنشاء مجلد data
         run: mkdir -p ./data
 
-      # ✨ تم تغيير مسار الإخراج إلى data/
+      # 🔥 الخطوة المعدلة: استخدام المسار الكامل
       - name: استخراج EPG من Canal+
         run: |
           npx epg-grabber \
-            --config ./canalplus.com.config.js \
-            --channels ./canalplus.com_fr.channels.xml \
-            --output ./data/epg-canalplus.xml \
+            --config "$(pwd)/canalplus.com.config.js" \
+            --channels "$(pwd)/canalplus.com_fr.channels.xml" \
+            --output "$(pwd)/data/epg-canalplus.xml" \
             --days 2
 
-      # ✨ تم تغيير مسار الضغط أيضاً
       - name: ضغط ملف EPG
         run: gzip -c ./data/epg-canalplus.xml > ./data/epg-canalplus.xml.gz
+        continue-on-error: true  # لا يتوقف إذا فشل الضغط
 
-      # ✨ رفع المخرجات من مجلد data
-      - name: رفع المخرجات (EPG)
+      - name: عرض محتويات مجلد data
+        run: |
+          echo "📂 محتويات مجلد data:"
+          ls -la ./data/
+        continue-on-error: true
+
+      - name: رفع المخرجات
         uses: actions/upload-artifact@v4
         with:
           name: EPG-CanalPlus
           path: |
             ./data/epg-canalplus.xml
             ./data/epg-canalplus.xml.gz
+          if-no-files-found: warn  # يحذر فقط إذا لم توجد ملفات
 
-      # (اختياري) دفع التغييرات إلى المستودع
-      # ملاحظة: هذا الخيار سيضيف مجلد data إلى الريبو
+      # (اختياري) دفع التغييرات
       - name: دفع EPG الجديد إلى المستودع
         run: |
           git config --global user.name "GitHub Actions Bot"
           git config --global user.email "actions@github.com"
           git add ./data/
-          git diff --quiet && git diff --staged --quiet || git commit -m "تحديث تلقائي لملف EPG في مجلد data"
-          git push
-        # إذا كنت لا تريد الدفع التلقائي، علّق على الأسطر أعلاه بإضافة # في بدايتها
+          if git diff --staged --quiet; then
+            echo "لا توجد تغييرات لدفعها"
+          else
+            git commit -m "تحديث تلقائي لملف EPG في مجلد data [skip ci]"
+            git push
+          fi
