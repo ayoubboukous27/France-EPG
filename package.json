@@ -9,8 +9,7 @@
   "dependencies": {
     "dayjs": "^1.11.10",
     "axios": "^1.6.0",
-    "puppeteer": "^21.0.0",
-    "xmltv": "^1.0.0"
+    "puppeteer": "^21.0.0"
   },
   "keywords": ["epg", "canalplus", "france"],
   "author": "",
