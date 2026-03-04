@@ -3,28 +3,23 @@ name: تحديث EPG Canal+ تلقائياً
 
 on:
   schedule:
-    - cron: '0 3 * * *'  # يعمل يومياً في 03:00 UTC
-  workflow_dispatch:      # للتشغيل اليدوي
+    - cron: '0 3 * * *'
+  workflow_dispatch:
 
 jobs:
   generate-epg:
     runs-on: ubuntu-latest
-    
-    # 📌 خطوة مهمة: التأكد من وجود الملفات قبل البدء
-    defaults:
-      run:
-        working-directory: ./
 
     steps:
       - name: استنساخ المستودع
         uses: actions/checkout@v4
 
-      - name: عرض محتويات المجلد (للتأكد من وجود الملفات)
+      - name: عرض هيكل المجلدات (للتأكيد)
         run: |
-          echo "📂 محتويات المجلد الحالي:"
+          echo "📂 محتويات المجلد الرئيسي:"
           ls -la
-          echo "📄 هل ملف الكونفيغ موجود؟"
-          test -f canalplus.com.config.js && echo "✅ نعم" || echo "❌ لا"
+          echo "📂 محتويات مجلد sites/:"
+          ls -la sites/ || echo "مجلد sites غير موجود"
 
       - name: إعداد Node.js
         uses: actions/setup-node@v4
@@ -37,23 +32,17 @@ jobs:
       - name: إنشاء مجلد data
         run: mkdir -p ./data
 
-      # 🔥 الخطوة المعدلة: استخدام المسار الكامل
+      # ✅ المسارات الصحيحة الآن (مع sites/)
       - name: استخراج EPG من Canal+
         run: |
           npx epg-grabber \
-            --config "$(pwd)/canalplus.com.config.js" \
-            --channels "$(pwd)/canalplus.com_fr.channels.xml" \
-            --output "$(pwd)/data/epg-canalplus.xml" \
+            --config "./sites/canalplus.com.config.js" \
+            --channels "./sites/canalplus.com_fr.channels.xml" \
+            --output "./data/epg-canalplus.xml" \
             --days 2
 
       - name: ضغط ملف EPG
         run: gzip -c ./data/epg-canalplus.xml > ./data/epg-canalplus.xml.gz
-        continue-on-error: true  # لا يتوقف إذا فشل الضغط
-
-      - name: عرض محتويات مجلد data
-        run: |
-          echo "📂 محتويات مجلد data:"
-          ls -la ./data/
         continue-on-error: true
 
       - name: رفع المخرجات
@@ -63,17 +52,16 @@ jobs:
           path: |
             ./data/epg-canalplus.xml
             ./data/epg-canalplus.xml.gz
-          if-no-files-found: warn  # يحذر فقط إذا لم توجد ملفات
 
-      # (اختياري) دفع التغييرات
+      # دفع التغييرات إلى المستودع (اختياري)
       - name: دفع EPG الجديد إلى المستودع
         run: |
           git config --global user.name "GitHub Actions Bot"
           git config --global user.email "actions@github.com"
           git add ./data/
           if git diff --staged --quiet; then
-            echo "لا توجد تغييرات لدفعها"
+            echo "لا توجد تغييرات"
           else
-            git commit -m "تحديث تلقائي لملف EPG في مجلد data [skip ci]"
+            git commit -m "تحديث EPG في مجلد data [skip ci]"
             git push
-          fi
+          done
