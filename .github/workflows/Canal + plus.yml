@@ -20,10 +20,10 @@ jobs:
 
       - name: تثبيت الاعتماديات
         run: |
-          npm install -g epg-grabber
-          npm install dayjs axios puppeteer
+          npm init -y
+          npm install dayjs axios puppeteer xmltv
 
-      - name: تثبيت Chromium لـ Puppeteer
+      - name: تثبيت Chromium
         run: |
           npx puppeteer install
           sudo apt-get update
@@ -32,25 +32,244 @@ jobs:
       - name: إنشاء مجلد data
         run: mkdir -p ./data
 
-      - name: استخراج EPG من Canal+
+      - name: إنشاء سكريبت EPG
         run: |
-          echo "🚀 بدء استخراج EPG..."
-          npx epg-grabber \
-            --config "./sites/canalplus.com.config.js" \
-            --channels "./sites/canalplus.com_fr.channels.xml" \
-            --output "./data/epg-canalplus.xml" \
-            --days 2 \
-            --timeout 60 \
-            --delay 2000
+          cat > grab-epg.js << 'EOF'
+          const dayjs = require('dayjs')
+          const utc = require('dayjs/plugin/utc')
+          const puppeteer = require('puppeteer')
+          const fs = require('fs')
+          const path = require('path')
+          const { Parser } = require('xmltv')
 
-      - name: عرض محتويات مجلد data
-        run: ls -la ./data/
+          dayjs.extend(utc)
+
+          // قراءة قنوات XML
+          function parseChannels(filePath) {
+            const content = fs.readFileSync(filePath, 'utf8')
+            const channels = []
+            const regex = /<channel[^>]*site_id="([^"]*)"[^>]*>([^<]+)<\/channel>/g
+            let match
+            while ((match = regex.exec(content)) !== null) {
+              channels.push({
+                site_id: match[1],
+                name: match[2].trim()
+              })
+            }
+            return channels
+          }
+
+          // الحصول على التوكين باستخدام Puppeteer
+          async function getToken() {
+            const browser = await puppeteer.launch({
+              headless: 'new',
+              args: ['--no-sandbox', '--disable-setuid-sandbox']
+            })
+            
+            try {
+              const page = await browser.newPage()
+              await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36')
+              
+              console.log('🌐 جلب التوكين...')
+              await page.goto('https://www.canalplus.com/programme-tv/', {
+                waitUntil: 'networkidle2',
+                timeout: 30000
+              })
+              
+              await page.waitForTimeout(3000)
+              
+              const token = await page.evaluate(() => {
+                // البحث في window.__INITIAL_STATE__
+                if (window.__INITIAL_STATE__?.token) return window.__INITIAL_STATE__.token
+                
+                // البحث في localStorage
+                const token = localStorage.getItem('token') || localStorage.getItem('accessToken')
+                if (token) return token
+                
+                // البحث في HTML
+                const html = document.documentElement.innerHTML
+                const match = html.match(/"token":"([^"]+)"/)
+                return match ? match[1] : null
+              })
+              
+              if (token) {
+                console.log('✅ تم الحصول على التوكين')
+                return token
+              }
+              
+              throw new Error('لم يتم العثور على التوكين')
+              
+            } finally {
+              await browser.close()
+            }
+          }
+
+          // جلب برامج قناة معينة
+          async function fetchChannelPrograms(channel, token, date) {
+            const browser = await puppeteer.launch({
+              headless: 'new',
+              args: ['--no-sandbox', '--disable-setuid-sandbox']
+            })
+            
+            try {
+              const page = await browser.newPage()
+              
+              // اعتراض طلبات API
+              let programs = []
+              await page.setRequestInterception(true)
+              
+              page.on('request', request => {
+                if (request.url().includes('hodor.canalplus.pro')) {
+                  console.log(`📡 طلب API: ${request.url()}`)
+                }
+                request.continue()
+              })
+              
+              page.on('response', async response => {
+                const url = response.url()
+                if (url.includes('hodor.canalplus.pro') && url.includes('broadcasts')) {
+                  try {
+                    const data = await response.json()
+                    if (data.timeSlices) {
+                      programs = data.timeSlices.flatMap(slice => slice.contents || [])
+                    }
+                  } catch (e) {
+                    // تجاهل الأخطاء
+                  }
+                }
+              })
+              
+              const site_id = channel.site_id.replace('#', '')
+              const apiUrl = `https://hodor.canalplus.pro/api/v2/mycanal/channels/${token}/${site_id}/broadcasts/day/0`
+              
+              console.log(`🌐 تحميل صفحة ${channel.name}...`)
+              await page.goto(`https://www.canalplus.com/chaines/${site_id}/`, {
+                waitUntil: 'networkidle2',
+                timeout: 30000
+              })
+              
+              await page.waitForTimeout(5000)
+              
+              // إذا لم نجد برامج من API، نحاول من DOM
+              if (programs.length === 0) {
+                programs = await page.evaluate(() => {
+                  const items = []
+                  document.querySelectorAll('[data-testid="program-item"], .program-item, .broadcast-item').forEach(el => {
+                    const title = el.querySelector('.title')?.textContent || el.querySelector('h3')?.textContent
+                    const time = el.querySelector('.time')?.textContent
+                    const description = el.querySelector('.description')?.textContent
+                    
+                    if (title) {
+                      items.push({
+                        title: title.trim(),
+                        description: description?.trim(),
+                        startTime: time,
+                        programTitle: title.trim()
+                      })
+                    }
+                  })
+                  return items
+                })
+              }
+              
+              return programs
+              
+            } finally {
+              await browser.close()
+            }
+          }
+
+          // إنشاء ملف EPG
+          async function generateEPG() {
+            console.log('🚀 بدء إنشاء EPG...')
+            
+            const channels = parseChannels('./sites/canalplus.com_fr.channels.xml')
+            console.log(`📺 تم العثور على ${channels.length} قناة`)
+            
+            const token = await getToken()
+            
+            const programmes = []
+            const today = dayjs()
+            
+            for (let i = 0; i < channels.length; i++) {
+              const channel = channels[i]
+              console.log(`[${i+1}/${channels.length}] معالجة ${channel.name}...`)
+              
+              try {
+                const programs = await fetchChannelPrograms(channel, token, today)
+                
+                programs.forEach((prog, index) => {
+                  const start = dayjs(prog.startTime || today.hour(9 + index).minute(0))
+                  programmes.push({
+                    channel: channel.name,
+                    title: prog.title || 'برنامج',
+                    desc: prog.description || '',
+                    start: start.format('YYYYMMDDHHmmss Z'),
+                    stop: start.add(1, 'hour').format('YYYYMMDDHHmmss Z')
+                  })
+                })
+                
+                console.log(`✅ تم العثور على ${programs.length} برنامج`)
+                
+              } catch (error) {
+                console.log(`❌ فشل: ${error.message}`)
+              }
+              
+              // تأخير بين القنوات
+              await new Promise(r => setTimeout(r, 2000))
+            }
+            
+            // إنشاء ملف XMLTV
+            const xmltv = new Parser({
+              generatorName: 'France-EPG',
+              generatorUrl: 'https://github.com/ayoubboukous27/France-EPG'
+            })
+            
+            channels.forEach(channel => {
+              xmltv.addChannel({
+                id: channel.name,
+                'display-name': channel.name
+              })
+            })
+            
+            programmes.forEach(prog => {
+              xmltv.addProgramme(prog)
+            })
+            
+            const xml = xmltv.getXML()
+            fs.writeFileSync('./data/epg-canalplus.xml', xml)
+            
+            console.log('✅ تم إنشاء ملف EPG بنجاح')
+          }
+
+          generateEPG().catch(console.error)
+          EOF
+
+      - name: تشغيل سكريبت EPG
+        run: node grab-epg.js
+
+      - name: ضغط ملف EPG
+        run: |
+          if [ -f "./data/epg-canalplus.xml" ]; then
+            gzip -c ./data/epg-canalplus.xml > ./data/epg-canalplus.xml.gz
+            echo "✅ تم ضغط الملف"
+          fi
+
+      - name: عرض النتائج
+        run: |
+          echo "📂 محتويات مجلد data:"
+          ls -la ./data/
+          if [ -f "./data/epg-canalplus.xml" ]; then
+            echo "📊 حجم الملف: $(wc -l < ./data/epg-canalplus.xml) سطر"
+          fi
 
       - name: رفع المخرجات
         uses: actions/upload-artifact@v4
         with:
           name: EPG-CanalPlus
-          path: ./data/epg-canalplus.xml
+          path: |
+            ./data/epg-canalplus.xml
+            ./data/epg-canalplus.xml.gz
 
       - name: دفع التغييرات إلى المستودع
         run: |
