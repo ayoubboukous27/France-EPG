@@ -1,0 +1,18 @@
+{
+  "name": "france-epg",
+  "version": "2.0.0",
+  "description": "EPG grabber for French channels with Puppeteer",
+  "main": "index.js",
+  "scripts": {
+    "grab": "epg-grabber --config ./sites/canalplus.com.config.js --channels ./sites/canalplus.com_fr.channels.xml --output ./data/epg-canalplus.xml --days 2"
+  },
+  "dependencies": {
+    "axios": "^1.7.0",
+    "dayjs": "^1.11.10",
+    "epg-grabber": "^1.0.0",
+    "puppeteer": "^22.0.0"
+  },
+  "keywords": ["epg", "canalplus", "france", "puppeteer"],
+  "author": "",
+  "license": "MIT"
+}
