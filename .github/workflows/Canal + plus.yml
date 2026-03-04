@@ -2,8 +2,8 @@ name: تحديث EPG Canal+ تلقائياً
 
 on:
   schedule:
-    - cron: '0 3 * * *'  # يعمل يومياً في 03:00 UTC
-  workflow_dispatch:      # للتشغيل اليدوي
+    - cron: '0 3 * * *'
+  workflow_dispatch:
 
 jobs:
   generate-epg:
@@ -13,13 +13,6 @@ jobs:
       - name: استنساخ المستودع
         uses: actions/checkout@v4
 
-      - name: عرض هيكل المجلدات
-        run: |
-          echo "📂 محتويات المجلد الرئيسي:"
-          ls -la
-          echo "📂 محتويات مجلد sites/:"
-          ls -la sites/ || echo "⚠️ مجلد sites غير موجود"
-
       - name: إعداد Node.js
         uses: actions/setup-node@v4
         with:
@@ -28,7 +21,13 @@ jobs:
       - name: تثبيت الاعتماديات
         run: |
           npm install -g epg-grabber
-          npm install dayjs axios
+          npm install dayjs axios puppeteer
+
+      - name: تثبيت Chromium لـ Puppeteer
+        run: |
+          npx puppeteer install
+          sudo apt-get update
+          sudo apt-get install -y chromium-browser
 
       - name: إنشاء مجلد data
         run: mkdir -p ./data
@@ -42,41 +41,25 @@ jobs:
             --output "./data/epg-canalplus.xml" \
             --days 2 \
             --timeout 60 \
-            --delay 1000
-
-      - name: ضغط ملف EPG
-        run: |
-          if [ -f "./data/epg-canalplus.xml" ]; then
-            gzip -c ./data/epg-canalplus.xml > ./data/epg-canalplus.xml.gz
-            echo "✅ تم ضغط الملف بنجاح"
-          else
-            echo "⚠️ ملف EPG غير موجود للضغط"
-          fi
-        continue-on-error: true
+            --delay 2000
 
       - name: عرض محتويات مجلد data
-        run: |
-          echo "📂 محتويات مجلد data:"
-          ls -la ./data/ || echo "⚠️ مجلد data فارغ"
+        run: ls -la ./data/
 
       - name: رفع المخرجات
         uses: actions/upload-artifact@v4
         with:
           name: EPG-CanalPlus
-          path: |
-            ./data/epg-canalplus.xml
-            ./data/epg-canalplus.xml.gz
-          if-no-files-found: warn
+          path: ./data/epg-canalplus.xml
 
-      - name: دفع EPG الجديد إلى المستودع
+      - name: دفع التغييرات إلى المستودع
         run: |
           git config --global user.name "GitHub Actions Bot"
           git config --global user.email "actions@github.com"
           git add ./data/
           if git diff --staged --quiet; then
-            echo "✅ لا توجد تغييرات لدفعها"
+            echo "✅ لا توجد تغييرات"
           else
-            git commit -m "تحديث تلقائي لملف EPG في مجلد data [skip ci]"
+            git commit -m "تحديث EPG [skip ci]"
             git push
-            echo "🚀 تم دفع التغييرات بنجاح"
           fi
