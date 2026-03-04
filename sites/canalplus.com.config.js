@@ -1,28 +1,21 @@
 const dayjs = require('dayjs')
-const axios = require('axios')
 const utc = require('dayjs/plugin/utc')
+const puppeteer = require('puppeteer')
+const axios = require('axios')
 
 dayjs.extend(utc)
 
 /**
- * Axios instance with enhanced browser-like headers
+ * Axios instance with browser-like headers (كخيار احتياطي)
  */
 const http = axios.create({
-  timeout: 60000,
+  timeout: 30000,
   headers: {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
+    'Accept': 'application/json, text/plain, */*',
     'Accept-Language': 'fr-FR,fr;q=0.9,en;q=0.8',
-    'Accept-Encoding': 'gzip, deflate, br',
     'Referer': 'https://www.canalplus.com/',
     'Origin': 'https://www.canalplus.com',
-    'Connection': 'keep-alive',
-    'Sec-Fetch-Dest': 'document',
-    'Sec-Fetch-Mode': 'navigate',
-    'Sec-Fetch-Site': 'same-origin',
-    'Sec-Fetch-User': '?1',
-    'Upgrade-Insecure-Requests': '1',
-    'Cache-Control': 'max-age=0'
   }
 })
 
@@ -31,27 +24,17 @@ module.exports = {
   days: 2,
 
   /**
-   * Build API URL with better token extraction
+   * استخدام Puppeteer للحصول على التوكين والبيانات
    */
   url: async function ({ channel, date }) {
     try {
       const [region, site_id] = channel.site_id.split('#')
       
-      // Try multiple methods to get token
-      let token = null
-      
-      // Method 1: From homepage
-      if (!token) {
-        token = await getTokenFromHomepage(region)
-      }
-      
-      // Method 2: Direct API attempt
-      if (!token) {
-        token = await getTokenDirect(region)
-      }
+      // محاولة الحصول على التوكين باستخدام Puppeteer
+      const token = await getTokenWithPuppeteer(region)
       
       if (!token) {
-        console.error('❌ Failed to get token for region:', region)
+        console.error('❌ فشل الحصول على التوكين حتى مع Puppeteer')
         return null
       }
 
@@ -60,17 +43,25 @@ module.exports = {
 
       return `https://hodor.canalplus.pro/api/v2/${path}/channels/${token}/${site_id}/broadcasts/day/${diff}`
     } catch (error) {
-      console.error('❌ Error building URL:', error.message)
+      console.error('❌ خطأ في بناء URL:', error.message)
       return null
     }
   },
 
   /**
-   * Parse programs JSON → EPG items
+   * استخدام Puppeteer لجلب البيانات إذا فشل axios
    */
-  async parser({ content }) {
+  async parser({ content, channel, date }) {
     let programs = []
-    const items = parseItems(content)
+    
+    // محاولة تحليل JSON العادي أولاً
+    let items = parseItems(content)
+    
+    // إذا لم نجد برامج، استخدم Puppeteer
+    if (items.length === 0) {
+      console.log('⚠️ لم نجد برامج في JSON، نجرب Puppeteer...')
+      items = await getProgramsWithPuppeteer(channel, date)
+    }
 
     for (let item of items) {
       try {
@@ -82,10 +73,8 @@ module.exports = {
         if (!start) continue
         if (prev) prev.stop = start
 
-        const stop = start.add(1, 'hour')
-
         programs.push({
-          title: item.title || '',
+          title: item.title || item.programTitle || '',
           description: parseDescription(info),
           image: parseImage(info),
           actors: parseCast(info, 'Avec :'),
@@ -96,183 +85,231 @@ module.exports = {
           date: parseDate(info),
           rating: parseRating(info),
           start,
-          stop
+          stop: start.add(1, 'hour')
         })
       } catch (error) {
-        console.error('❌ Error processing program:', error.message)
+        console.error('❌ خطأ في معالجة برنامج:', error.message)
         continue
       }
     }
 
     return programs
-  },
-
-  /**
-   * Auto channel loader (optional)
-   */
-  async channels({ country }) {
-    const paths = {
-      ad: 'cpafr/ad',
-      bf: 'cpafr/bf',
-      bi: 'cpafr/bi',
-      bj: 'cpafr/bj',
-      bl: 'cpant/bl',
-      cd: 'cpafr/cd',
-      cf: 'cpafr/cf',
-      cg: 'cpafr/cg',
-      ch: 'cpche',
-      ci: 'cpafr/ci',
-      cm: 'cpafr/cm',
-      cv: 'cpafr/cv',
-      dj: 'cpafr/dj',
-      fr: 'cpfra',
-      ga: 'cpafr/ga',
-      gf: 'cpant/gf',
-      gh: 'cpafr/gh',
-      gm: 'cpafr/gm',
-      gn: 'cpafr/gn',
-      gp: 'cpafr/gp',
-      gw: 'cpafr/gw',
-      ht: 'cpant/ht',
-      mf: 'cpant/mf',
-      mg: 'cpafr/mg',
-      ml: 'cpafr/ml',
-      mq: 'cpant/mq',
-      mr: 'cpafr/mr',
-      mu: 'cpmus/mu',
-      nc: 'cpncl/nc',
-      ne: 'cpafr/ne',
-      pf: 'cppyf/pf',
-      pl: 'cppol',
-      re: 'cpreu/re',
-      rw: 'cpafr/rw',
-      sl: 'cpafr/sl',
-      sn: 'cpafr/sn',
-      td: 'cpafr/td',
-      tg: 'cpafr/tg',
-      wf: 'cpncl/wf',
-      yt: 'cpreu/yt'
-    }
-
-    const path = paths[country]
-    if (!path) return []
-
-    const url = `https://secure-webtv-static.canal-plus.com/metadata/${path}/all/v2.2/globalchannels.json`
-
-    const data = await http
-      .get(url)
-      .then(r => r.data)
-      .catch(err => {
-        console.error('❌ Channels load failed:', err.message)
-        return null
-      })
-
-    if (!data || !data.channels) return []
-
-    return data.channels
-      .filter(c => c.name && c.name !== '.')
-      .map(channel => ({
-        lang: 'fr',
-        site_id: country === 'fr' ? `#${channel.id}` : `${country}#${channel.id}`,
-        name: channel.name
-      }))
   }
 }
 
-/* ===================== IMPROVED HELPERS ===================== */
+/* ===================== HELPERS المتطورة ===================== */
 
-async function getTokenFromHomepage(region) {
+async function getTokenWithPuppeteer(region) {
+  let browser = null
   try {
-    const baseUrl = region === 'pl' 
+    console.log('🚀 تشغيل Puppeteer للحصول على التوكين...')
+    
+    // تشغيل المتصفح
+    browser = await puppeteer.launch({
+      headless: 'new',
+      args: [
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--disable-web-security',
+        '--disable-features=IsolateOrigins,site-per-process',
+        '--window-size=1920,1080'
+      ]
+    })
+    
+    const page = await browser.newPage()
+    
+    // تعيين وكيل المستخدم
+    await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36')
+    
+    // تعيين الـ Viewport
+    await page.setViewport({ width: 1920, height: 1080 })
+    
+    // تعيين الـ Headers الإضافية
+    await page.setExtraHTTPHeaders({
+      'Accept-Language': 'fr-FR,fr;q=0.9,en;q=0.8'
+    })
+    
+    // الذهاب إلى الصفحة
+    const url = region === 'pl' 
       ? 'https://www.canalplus.com/pl/program-tv/' 
       : 'https://www.canalplus.com/programme-tv/'
     
-    console.log('🔍 Attempting to get token from:', baseUrl)
+    console.log(`🌐 تحميل الصفحة: ${url}`)
     
-    const response = await http.get(baseUrl, {
-      headers: {
-        'Cache-Control': 'no-cache',
-        'Pragma': 'no-cache'
+    await page.goto(url, {
+      waitUntil: 'networkidle2',
+      timeout: 30000
+    })
+    
+    // انتظار قليلاً لتحميل JavaScript
+    await page.waitForTimeout(3000)
+    
+    // محاولة العثور على التوكين بعدة طرق
+    
+    // الطريقة 1: من متغيرات window
+    const token1 = await page.evaluate(() => {
+      try {
+        // البحث في window.__INITIAL_STATE__
+        if (window.__INITIAL_STATE__ && window.__INITIAL_STATE__.token) {
+          return window.__INITIAL_STATE__.token
+        }
+        
+        // البحث في localStorage
+        const token = localStorage.getItem('token') || 
+                     localStorage.getItem('accessToken') ||
+                     sessionStorage.getItem('token')
+        if (token) return token
+        
+        return null
+      } catch (e) {
+        return null
       }
     })
     
-    const html = response.data.toString()
+    if (token1) {
+      console.log('✅ تم العثور على التوكين في window')
+      return token1
+    }
     
-    // Try multiple token patterns
+    // الطريقة 2: البحث في HTML
+    const html = await page.content()
+    
     const patterns = [
       /"token":"([^"]+)"/,
       /token['"]?\s*:\s*['"]([^'"]+)/,
       /"accessToken":"([^"]+)"/,
       /authorization":\{"value":"([^"]+)"}/,
-      /"value":"([A-Za-z0-9-_]+\.[A-Za-z0-9-_]+\.[A-Za-z0-9-_]+)"/ // JWT pattern
+      /"value":"([A-Za-z0-9-_]+\.[A-Za-z0-9-_]+\.[A-Za-z0-9-_]+)"/,
+      /"jwt":"([^"]+)"/
     ]
     
     for (const pattern of patterns) {
       const match = html.match(pattern)
       if (match && match[1]) {
-        console.log('✅ Token found successfully')
+        console.log('✅ تم العثور على التوكين في HTML')
         return match[1]
       }
     }
     
-    console.log('⚠️ No token found in homepage')
+    // الطريقة 3: اعتراض طلبات الشبكة
+    console.log('🔍 محاولة اعتراض طلبات الشبكة...')
+    
+    let networkToken = null
+    
+    await page.setRequestInterception(true)
+    page.on('request', request => {
+      const url = request.url()
+      if (url.includes('hodor.canalplus.pro') && url.includes('token')) {
+        const headers = request.headers()
+        if (headers.authorization) {
+          const match = headers.authorization.match(/Bearer\s+([^\s]+)/)
+          if (match) networkToken = match[1]
+        }
+      }
+      request.continue()
+    })
+    
+    // إعادة تحميل الصفحة لاعتراض الطلبات
+    await page.reload({ waitUntil: 'networkidle2' })
+    await page.waitForTimeout(3000)
+    
+    if (networkToken) {
+      console.log('✅ تم العثور على التوكين من طلبات الشبكة')
+      return networkToken
+    }
+    
+    console.log('❌ لم نتمكن من العثور على التوكين')
     return null
+    
   } catch (error) {
-    console.error('❌ Failed to load homepage:', error.message)
+    console.error('❌ خطأ في Puppeteer:', error.message)
     return null
+  } finally {
+    if (browser) await browser.close()
   }
 }
 
-async function getTokenDirect(region) {
+async function getProgramsWithPuppeteer(channel, date) {
+  let browser = null
   try {
-    console.log('🔍 Attempting direct token API...')
+    console.log(`🚀 استخدام Puppeteer لجلب برامج ${channel.name}...`)
     
-    // Try different token endpoints
-    const endpoints = [
-      'https://hodor.canalplus.pro/api/v2/mycanal/token',
-      'https://hodor.canalplus.pro/api/v2/mycanalint/token',
-      'https://secure-webtv-static.canal-plus.com/token.json'
-    ]
+    const [region, site_id] = channel.site_id.split('#')
     
-    for (const endpoint of endpoints) {
+    browser = await puppeteer.launch({
+      headless: 'new',
+      args: ['--no-sandbox', '--disable-setuid-sandbox']
+    })
+    
+    const page = await browser.newPage()
+    
+    // الذهاب إلى صفحة القناة
+    const url = region === 'pl'
+      ? `https://www.canalplus.com/pl/chaines/${site_id}/`
+      : `https://www.canalplus.com/chaines/${site_id}/`
+    
+    console.log(`🌐 تحميل صفحة القناة: ${url}`)
+    
+    await page.goto(url, {
+      waitUntil: 'networkidle2',
+      timeout: 30000
+    })
+    
+    await page.waitForTimeout(3000)
+    
+    // البحث عن بيانات البرامج في الصفحة
+    const programs = await page.evaluate(() => {
       try {
-        const response = await http.get(endpoint, {
-          headers: {
-            'Authorization': 'Basic ' + Buffer.from('mycanal:mycanal').toString('base64')
-          },
-          timeout: 5000
+        // البحث في window.__INITIAL_STATE__
+        if (window.__INITIAL_STATE__ && window.__INITIAL_STATE__.broadcasts) {
+          return window.__INITIAL_STATE__.broadcasts
+        }
+        
+        // البحث في عناصر DOM
+        const broadcasts = []
+        const items = document.querySelectorAll('[data-testid="broadcast-item"], .broadcast-item, .program-item')
+        
+        items.forEach(item => {
+          const title = item.querySelector('.title, .program-title')?.textContent
+          const time = item.querySelector('.time, .start-time')?.textContent
+          const description = item.querySelector('.description, .synopsis')?.textContent
+          
+          if (title) {
+            broadcasts.push({
+              title,
+              description,
+              startTime: time,
+              programTitle: title
+            })
+          }
         })
         
-        if (response.data?.token) {
-          console.log('✅ Token found via direct API')
-          return response.data.token
-        }
+        return broadcasts
       } catch (e) {
-        // Continue to next endpoint
+        return []
       }
+    })
+    
+    if (programs.length > 0) {
+      console.log(`✅ تم العثور على ${programs.length} برنامج`)
     }
     
-    return null
+    return programs
+    
   } catch (error) {
-    return null
+    console.error('❌ خطأ في جلب البرامج:', error.message)
+    return []
+  } finally {
+    if (browser) await browser.close()
   }
 }
 
 function parseItems(content) {
   try {
-    if (!content || content.trim() === '') {
-      console.log('⚠️ Empty content received')
-      return []
-    }
-    
+    if (!content || content.trim() === '') return []
     const data = JSON.parse(content)
+    if (!data) return []
     
-    if (!data) {
-      console.log('⚠️ No data in response')
-      return []
-    }
-    
-    // Handle different response structures
     if (Array.isArray(data.timeSlices)) {
       return data.timeSlices.flatMap(slice => slice.contents || [])
     } else if (Array.isArray(data.broadcasts)) {
@@ -281,33 +318,24 @@ function parseItems(content) {
       return data
     }
     
-    console.log('⚠️ Unknown response structure')
     return []
   } catch (e) {
-    console.error('❌ Error parsing JSON:', e.message)
     return []
   }
 }
 
 function parseStart(item) {
   if (!item) return null
-  
-  // Try different date fields
   const dateStr = item.startTime || item.start || item.start_date || item.broadcastDate
-  
   if (!dateStr) return null
-  
   const date = dayjs(dateStr)
   return date.isValid() ? date : null
 }
 
 async function loadProgramDetails(item) {
   if (!item) return null
-  
-  // Try different URL fields
   const url = item.onClick?.URLPage || item.detailUrl || item.url || item.link
-  
-  if (!url) return item // Return item itself if no detail URL
+  if (!url) return item
   
   try {
     const response = await http.get(url, {
@@ -319,14 +347,12 @@ async function loadProgramDetails(item) {
     })
     return response.data
   } catch (error) {
-    return item // Return original item on error
+    return item
   }
 }
 
 function parseInfo(data) {
   if (!data) return null
-  
-  // Try different info paths
   return data.detail?.informations || 
          data.informations || 
          data.info ||
@@ -337,7 +363,6 @@ function parseInfo(data) {
 
 function parseDescription(info) {
   if (!info) return null
-  
   return info.summary || 
          info.description || 
          info.synopsis || 
@@ -348,40 +373,22 @@ function parseDescription(info) {
 
 function parseImage(info) {
   if (!info) return null
-  
   return info.URLImage || 
          info.image || 
          info.picture || 
          info.thumbnail ||
          info.poster ||
-         (info.images && (info.images.landscape || info.images.portrait || info.images.thumbnail)) ||
+         (info.images && (info.images.landscape || info.images.portrait)) ||
          null
 }
 
 function parseCast(info, type) {
   if (!info?.personnalities && !info?.cast) return []
   
-  // Try personnalities first
   if (info.personnalities) {
     const block = info.personnalities.find(p => p.prefix === type)
     if (block?.personnalitiesList) {
       return block.personnalitiesList.map(p => p.title)
-    }
-  }
-  
-  // Try cast array
-  if (info.cast) {
-    const roleMap = {
-      'Avec :': 'actors',
-      'De :': 'directors',
-      'Scénario :': 'writers',
-      'Musique :': 'composers',
-      'Présenté par :': 'presenters'
-    }
-    
-    const role = roleMap[type]
-    if (role && info.cast[role]) {
-      return info.cast[role]
     }
   }
   
@@ -390,42 +397,24 @@ function parseCast(info, type) {
 
 function parseDate(info) {
   if (!info) return null
-  
-  return info.productionYear || 
-         info.year || 
-         info.releaseDate ||
-         info.date ||
-         null
+  return info.productionYear || info.year || info.releaseDate || null
 }
 
 function parseRating(info) {
-  if (!info?.parentalRatings && !info?.rating) return null
+  if (!info?.parentalRatings) return null
   
-  // Try parentalRatings
-  if (info.parentalRatings) {
-    const rating = info.parentalRatings.find(r => r.authority === 'CSA')
-    if (rating && rating.value !== '1') {
-      const map = {
-        '2': '-10',
-        '3': '-12',
-        '4': '-16',
-        '5': '-18'
-      }
-      
-      return {
-        system: rating.authority || 'CSA',
-        value: map[rating.value] || rating.value
-      }
-    }
+  const rating = info.parentalRatings.find(r => r.authority === 'CSA')
+  if (!rating || rating.value === '1') return null
+
+  const map = {
+    '2': '-10',
+    '3': '-12',
+    '4': '-16',
+    '5': '-18'
   }
-  
-  // Try simple rating
-  if (info.rating) {
-    return {
-      system: 'CSA',
-      value: info.rating
-    }
+
+  return {
+    system: rating.authority || 'CSA',
+    value: map[rating.value] || rating.value
   }
-  
-  return null
-}
+      }
