@@ -5,18 +5,24 @@ const utc = require('dayjs/plugin/utc')
 dayjs.extend(utc)
 
 /**
- * Axios instance with browser-like headers
- * This is REQUIRED to avoid 403 on GitHub Actions
+ * Axios instance with enhanced browser-like headers
  */
 const http = axios.create({
-  timeout: 30000,
+  timeout: 60000,
   headers: {
-    'User-Agent':
-      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-    Accept: 'text/html,application/xhtml+xml,application/json',
-    'Accept-Language': 'fr-FR,fr;q=0.9',
-    Referer: 'https://www.canalplus.com/',
-    Connection: 'keep-alive'
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
+    'Accept-Language': 'fr-FR,fr;q=0.9,en;q=0.8',
+    'Accept-Encoding': 'gzip, deflate, br',
+    'Referer': 'https://www.canalplus.com/',
+    'Origin': 'https://www.canalplus.com',
+    'Connection': 'keep-alive',
+    'Sec-Fetch-Dest': 'document',
+    'Sec-Fetch-Mode': 'navigate',
+    'Sec-Fetch-Site': 'same-origin',
+    'Sec-Fetch-User': '?1',
+    'Upgrade-Insecure-Requests': '1',
+    'Cache-Control': 'max-age=0'
   }
 })
 
@@ -25,37 +31,38 @@ module.exports = {
   days: 2,
 
   /**
-   * Build API URL
+   * Build API URL with better token extraction
    */
   url: async function ({ channel, date }) {
-    const [region, site_id] = channel.site_id.split('#')
-
-    const baseUrl =
-      region === 'pl'
-        ? 'https://www.canalplus.com/pl/program-tv/'
-        : `https://www.canalplus.com/${region}/programme-tv/`
-
-    // Load HTML page to extract token
-    const html = await http
-      .get(baseUrl)
-      .then(r => r.data.toString())
-      .catch(err => {
-        console.error('Failed to load Canal+ page:', err.message)
+    try {
+      const [region, site_id] = channel.site_id.split('#')
+      
+      // Try multiple methods to get token
+      let token = null
+      
+      // Method 1: From homepage
+      if (!token) {
+        token = await getTokenFromHomepage(region)
+      }
+      
+      // Method 2: Direct API attempt
+      if (!token) {
+        token = await getTokenDirect(region)
+      }
+      
+      if (!token) {
+        console.error('❌ Failed to get token for region:', region)
         return null
-      })
+      }
 
-    if (!html) return null
+      const path = region === 'pl' ? 'mycanalint' : 'mycanal'
+      const diff = date.diff(dayjs.utc().startOf('d'), 'd')
 
-    const token = parseToken(html)
-    if (!token) {
-      console.error('Canal+ token not found')
+      return `https://hodor.canalplus.pro/api/v2/${path}/channels/${token}/${site_id}/broadcasts/day/${diff}`
+    } catch (error) {
+      console.error('❌ Error building URL:', error.message)
       return null
     }
-
-    const path = region === 'pl' ? 'mycanalint' : 'mycanal'
-    const diff = date.diff(dayjs.utc().startOf('d'), 'd')
-
-    return `https://hodor.canalplus.pro/api/v2/${path}/channels/${token}/${site_id}/broadcasts/day/${diff}`
   },
 
   /**
@@ -66,30 +73,35 @@ module.exports = {
     const items = parseItems(content)
 
     for (let item of items) {
-      const prev = programs[programs.length - 1]
-      const details = await loadProgramDetails(item)
-      const info = parseInfo(details)
-      const start = parseStart(item)
+      try {
+        const prev = programs[programs.length - 1]
+        const details = await loadProgramDetails(item)
+        const info = parseInfo(details)
+        const start = parseStart(item)
 
-      if (!start) continue
-      if (prev) prev.stop = start
+        if (!start) continue
+        if (prev) prev.stop = start
 
-      const stop = start.add(1, 'hour')
+        const stop = start.add(1, 'hour')
 
-      programs.push({
-        title: item.title || '',
-        description: parseDescription(info),
-        image: parseImage(info),
-        actors: parseCast(info, 'Avec :'),
-        director: parseCast(info, 'De :'),
-        writer: parseCast(info, 'Scénario :'),
-        composer: parseCast(info, 'Musique :'),
-        presenter: parseCast(info, 'Présenté par :'),
-        date: parseDate(info),
-        rating: parseRating(info),
-        start,
-        stop
-      })
+        programs.push({
+          title: item.title || '',
+          description: parseDescription(info),
+          image: parseImage(info),
+          actors: parseCast(info, 'Avec :'),
+          director: parseCast(info, 'De :'),
+          writer: parseCast(info, 'Scénario :'),
+          composer: parseCast(info, 'Musique :'),
+          presenter: parseCast(info, 'Présenté par :'),
+          date: parseDate(info),
+          rating: parseRating(info),
+          start,
+          stop
+        })
+      } catch (error) {
+        console.error('❌ Error processing program:', error.message)
+        continue
+      }
     }
 
     return programs
@@ -151,7 +163,7 @@ module.exports = {
       .get(url)
       .then(r => r.data)
       .catch(err => {
-        console.error('Channels load failed:', err.message)
+        console.error('❌ Channels load failed:', err.message)
         return null
       })
 
@@ -167,72 +179,253 @@ module.exports = {
   }
 }
 
-/* ===================== HELPERS ===================== */
+/* ===================== IMPROVED HELPERS ===================== */
 
-function parseToken(data) {
-  const match = data.match(/"token":"([^"]+)"/)
-  return match ? match[1] : null
+async function getTokenFromHomepage(region) {
+  try {
+    const baseUrl = region === 'pl' 
+      ? 'https://www.canalplus.com/pl/program-tv/' 
+      : 'https://www.canalplus.com/programme-tv/'
+    
+    console.log('🔍 Attempting to get token from:', baseUrl)
+    
+    const response = await http.get(baseUrl, {
+      headers: {
+        'Cache-Control': 'no-cache',
+        'Pragma': 'no-cache'
+      }
+    })
+    
+    const html = response.data.toString()
+    
+    // Try multiple token patterns
+    const patterns = [
+      /"token":"([^"]+)"/,
+      /token['"]?\s*:\s*['"]([^'"]+)/,
+      /"accessToken":"([^"]+)"/,
+      /authorization":\{"value":"([^"]+)"}/,
+      /"value":"([A-Za-z0-9-_]+\.[A-Za-z0-9-_]+\.[A-Za-z0-9-_]+)"/ // JWT pattern
+    ]
+    
+    for (const pattern of patterns) {
+      const match = html.match(pattern)
+      if (match && match[1]) {
+        console.log('✅ Token found successfully')
+        return match[1]
+      }
+    }
+    
+    console.log('⚠️ No token found in homepage')
+    return null
+  } catch (error) {
+    console.error('❌ Failed to load homepage:', error.message)
+    return null
+  }
+}
+
+async function getTokenDirect(region) {
+  try {
+    console.log('🔍 Attempting direct token API...')
+    
+    // Try different token endpoints
+    const endpoints = [
+      'https://hodor.canalplus.pro/api/v2/mycanal/token',
+      'https://hodor.canalplus.pro/api/v2/mycanalint/token',
+      'https://secure-webtv-static.canal-plus.com/token.json'
+    ]
+    
+    for (const endpoint of endpoints) {
+      try {
+        const response = await http.get(endpoint, {
+          headers: {
+            'Authorization': 'Basic ' + Buffer.from('mycanal:mycanal').toString('base64')
+          },
+          timeout: 5000
+        })
+        
+        if (response.data?.token) {
+          console.log('✅ Token found via direct API')
+          return response.data.token
+        }
+      } catch (e) {
+        // Continue to next endpoint
+      }
+    }
+    
+    return null
+  } catch (error) {
+    return null
+  }
 }
 
 function parseItems(content) {
   try {
+    if (!content || content.trim() === '') {
+      console.log('⚠️ Empty content received')
+      return []
+    }
+    
     const data = JSON.parse(content)
-    if (!data || !Array.isArray(data.timeSlices)) return []
-    return data.timeSlices.flatMap(slice => slice.contents || [])
+    
+    if (!data) {
+      console.log('⚠️ No data in response')
+      return []
+    }
+    
+    // Handle different response structures
+    if (Array.isArray(data.timeSlices)) {
+      return data.timeSlices.flatMap(slice => slice.contents || [])
+    } else if (Array.isArray(data.broadcasts)) {
+      return data.broadcasts
+    } else if (Array.isArray(data)) {
+      return data
+    }
+    
+    console.log('⚠️ Unknown response structure')
+    return []
   } catch (e) {
+    console.error('❌ Error parsing JSON:', e.message)
     return []
   }
 }
 
 function parseStart(item) {
-  return item && item.startTime ? dayjs(item.startTime) : null
+  if (!item) return null
+  
+  // Try different date fields
+  const dateStr = item.startTime || item.start || item.start_date || item.broadcastDate
+  
+  if (!dateStr) return null
+  
+  const date = dayjs(dateStr)
+  return date.isValid() ? date : null
 }
 
 async function loadProgramDetails(item) {
-  if (!item?.onClick?.URLPage) return null
-  return await http
-    .get(item.onClick.URLPage)
-    .then(r => r.data)
-    .catch(() => null)
+  if (!item) return null
+  
+  // Try different URL fields
+  const url = item.onClick?.URLPage || item.detailUrl || item.url || item.link
+  
+  if (!url) return item // Return item itself if no detail URL
+  
+  try {
+    const response = await http.get(url, {
+      timeout: 10000,
+      headers: {
+        'Accept': 'application/json, text/plain, */*',
+        'X-Requested-With': 'XMLHttpRequest'
+      }
+    })
+    return response.data
+  } catch (error) {
+    return item // Return original item on error
+  }
 }
 
 function parseInfo(data) {
-  return data?.detail?.informations || null
+  if (!data) return null
+  
+  // Try different info paths
+  return data.detail?.informations || 
+         data.informations || 
+         data.info ||
+         data.details ||
+         data.program ||
+         data
 }
 
 function parseDescription(info) {
-  return info?.summary || null
+  if (!info) return null
+  
+  return info.summary || 
+         info.description || 
+         info.synopsis || 
+         info.longDescription ||
+         info.shortDescription ||
+         null
 }
 
 function parseImage(info) {
-  return info?.URLImage || null
+  if (!info) return null
+  
+  return info.URLImage || 
+         info.image || 
+         info.picture || 
+         info.thumbnail ||
+         info.poster ||
+         (info.images && (info.images.landscape || info.images.portrait || info.images.thumbnail)) ||
+         null
 }
 
 function parseCast(info, type) {
-  if (!info?.personnalities) return []
-  const block = info.personnalities.find(p => p.prefix === type)
-  return block?.personnalitiesList?.map(p => p.title) || []
+  if (!info?.personnalities && !info?.cast) return []
+  
+  // Try personnalities first
+  if (info.personnalities) {
+    const block = info.personnalities.find(p => p.prefix === type)
+    if (block?.personnalitiesList) {
+      return block.personnalitiesList.map(p => p.title)
+    }
+  }
+  
+  // Try cast array
+  if (info.cast) {
+    const roleMap = {
+      'Avec :': 'actors',
+      'De :': 'directors',
+      'Scénario :': 'writers',
+      'Musique :': 'composers',
+      'Présenté par :': 'presenters'
+    }
+    
+    const role = roleMap[type]
+    if (role && info.cast[role]) {
+      return info.cast[role]
+    }
+  }
+  
+  return []
 }
 
 function parseDate(info) {
-  return info?.productionYear || null
+  if (!info) return null
+  
+  return info.productionYear || 
+         info.year || 
+         info.releaseDate ||
+         info.date ||
+         null
 }
 
 function parseRating(info) {
-  if (!info?.parentalRatings) return null
-  const rating = info.parentalRatings.find(r => r.authority === 'CSA')
-  if (!rating || rating.value === '1') return null
-
-  const map = {
-    '2': '-10',
-    '3': '-12',
-    '4': '-16',
-    '5': '-18'
+  if (!info?.parentalRatings && !info?.rating) return null
+  
+  // Try parentalRatings
+  if (info.parentalRatings) {
+    const rating = info.parentalRatings.find(r => r.authority === 'CSA')
+    if (rating && rating.value !== '1') {
+      const map = {
+        '2': '-10',
+        '3': '-12',
+        '4': '-16',
+        '5': '-18'
+      }
+      
+      return {
+        system: rating.authority || 'CSA',
+        value: map[rating.value] || rating.value
+      }
+    }
   }
-
-  return {
-    system: rating.authority,
-    value: map[rating.value] || rating.value
+  
+  // Try simple rating
+  if (info.rating) {
+    return {
+      system: 'CSA',
+      value: info.rating
+    }
   }
+  
+  return null
 }
-
