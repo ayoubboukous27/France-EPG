@@ -1,0 +1,27 @@
+name: Update EPG
+
+on:
+  schedule:
+    - cron: "0 */3 * * *"   # كل 3 ساعات
+  workflow_dispatch:        # تشغيل يدوي
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write  # هذا يضمن أن push يعمل
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install requests
+
+      - name: Run script
+        run: python update_epg.py
