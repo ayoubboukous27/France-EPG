@@ -2,10 +2,11 @@ import requests
 import xml.etree.ElementTree as ET
 import subprocess
 
-EPG_URL = "https://raw.githubusercontent.com/ayoubboukous27/France-EPG/refs/heads/main/Data/guide_france.xml"
+# رابط EPG الجديد
+EPG_URL = "https://iptv-epg.org/files/epg-fr.xml"
 OUTPUT_FILE = "updated_epg.xml"
 
-# الشعارات حسب المعرف الجديد
+# شعارات beINSPORTS حسب المعرف الجديد
 logos_by_id = {
     "beINSPORTS1.fr": "https://raw.githubusercontent.com/tv-logo/tv-logos/refs/heads/main/countries/france/bein-sports-1-french-fr.png",
     "beINSPORTS2.fr": "https://raw.githubusercontent.com/tv-logo/tv-logos/refs/heads/main/countries/france/bein-sports-2-french-fr.png",
