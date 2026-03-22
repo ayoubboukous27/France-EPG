@@ -5,10 +5,11 @@ import subprocess
 EPG_URL = "https://raw.githubusercontent.com/ayoubboukous27/France-EPG/refs/heads/main/Data/guide_france.xml"
 OUTPUT_FILE = "updated_epg.xml"
 
+# الشعارات حسب المعرف الجديد
 logos_by_id = {
-    "bein-sports-1.fr": "https://raw.githubusercontent.com/tv-logo/tv-logos/refs/heads/main/countries/france/bein-sports-1-french-fr.png",
-    "bein-sports-2.fr": "https://raw.githubusercontent.com/tv-logo/tv-logos/refs/heads/main/countries/france/bein-sports-2-french-fr.png",
-    "bein-sports-3.fr": "https://raw.githubusercontent.com/tv-logo/tv-logos/refs/heads/main/countries/france/bein-sports-3-french-fr.png",
+    "beINSPORTS1.fr": "https://raw.githubusercontent.com/tv-logo/tv-logos/refs/heads/main/countries/france/bein-sports-1-french-fr.png",
+    "beINSPORTS2.fr": "https://raw.githubusercontent.com/tv-logo/tv-logos/refs/heads/main/countries/france/bein-sports-2-french-fr.png",
+    "beINSPORTS3.fr": "https://raw.githubusercontent.com/tv-logo/tv-logos/refs/heads/main/countries/france/bein-sports-3-french-fr.png",
 }
 
 def update_epg():
@@ -41,7 +42,6 @@ def git_commit_push():
     subprocess.run(["git", "config", "user.name", "github-actions"], check=True)
     subprocess.run(["git", "config", "user.email", "actions@github.com"], check=True)
     subprocess.run(["git", "add", OUTPUT_FILE], check=True)
-    # إذا هناك تغييرات فقط يتم commit
     result = subprocess.run(["git", "diff", "--staged", "--quiet"])
     if result.returncode != 0:
         subprocess.run(["git", "commit", "-m", "Update EPG"], check=True)
